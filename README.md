@@ -76,18 +76,18 @@ mysql>
 
 先执行以下命令打包:
 
-mvn package -Dmaven.test.skip=true
+`mvn package -Dmaven.test.skip=true`
 
-生成的文件是 target\lealone-mysql-5.0.0-SNAPSHOT.jar
+生成的文件是 `target\lealone-mysql-5.0.0-SNAPSHOT.jar`
 
 
 #### 运行
 
-确保已经按 [Lealone 快速入门](https://github.com/lealone/Lealone-Docs/blob/master/%E5%BA%94%E7%94%A8%E6%96%87%E6%A1%A3/%E7%94%A8%E6%88%B7%E6%96%87%E6%A1%A3.md) 中的步骤安装了 Lealone 数据库，这里假定安装到 E:\lealone-database 目录
+确保已经按 [Lealone 快速入门](https://github.com/lealone/Lealone-Docs/blob/master/%E5%BA%94%E7%94%A8%E6%96%87%E6%A1%A3/%E7%94%A8%E6%88%B7%E6%96%87%E6%A1%A3.md) 中的步骤安装了 Lealone 数据库，这里假定安装到 `E:\lealone-database` 目录
 
-把 target\lealone-mysql-5.0.0-SNAPSHOT.jar 复制到 E:\lealone-database\lib 目录
+把 `target\lealone-mysql-5.0.0-SNAPSHOT.jar` 复制到 `E:\lealone-database\lib` 目录
 
-修改 E:\lealone-database\conf\lealone.yaml 文件，增加以下配置:
+修改 `E:\lealone-database\conf\lealone.yaml` 文件，增加以下配置:
 
 ```yaml
 sql_engines:
@@ -126,4 +126,4 @@ protocol_server_engines:
 ```
  
 
-最后打开命令行窗口，切换到 E:\lealone-database\bin 目录，输入 lealone 启动数据库即可
+最后打开命令行窗口，切换到 `E:\lealone-database\bin` 目录，输入 `lealone` 启动数据库即可
