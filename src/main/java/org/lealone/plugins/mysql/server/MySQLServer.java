@@ -36,7 +36,7 @@ import org.lealone.server.DelegatedProtocolServer;
 public class MySQLServer extends DelegatedProtocolServer implements AsyncConnectionManager {
 
     public static final String DATABASE_NAME = "mysql";
-    public static final int DEFAULT_PORT = 9214;
+    public static final int DEFAULT_PORT = 9310;
 
     private final Set<MySQLServerConnection> connections = Collections
             .synchronizedSet(new HashSet<MySQLServerConnection>());
