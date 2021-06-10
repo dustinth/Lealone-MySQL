@@ -17,18 +17,69 @@
  */
 package org.lealone.plugins.mysql.server.protocol;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 
-public interface PacketOutput {
+import org.lealone.common.logging.Logger;
+import org.lealone.common.logging.LoggerFactory;
+import org.lealone.plugins.mysql.server.MySQLServerConnection;
 
-    ByteBuffer checkWriteBuffer(ByteBuffer buffer, int capacity);
+public class PacketOutput {
 
-    ByteBuffer allocate();
+    private static final Logger logger = LoggerFactory.getLogger(MySQLServerConnection.class);
 
-    int getPacketHeaderSize();
+    private final DataOutputStream out;
 
-    ByteBuffer writeToBuffer(byte[] src, ByteBuffer buffer);
+    public PacketOutput(DataOutputStream out) {
+        this.out = out;
+    }
 
-    void write(ByteBuffer buffer);
+    public ByteBuffer checkWriteBuffer(ByteBuffer buffer, int capacity) {
+        if (capacity > buffer.remaining()) {
+            write(buffer);
+            return allocate();
+        } else {
+            return buffer;
+        }
+    }
 
+    public ByteBuffer allocate() {
+        return ByteBuffer.allocate(MySQLServerConnection.BUFFER_SIZE);
+    }
+
+    public int getPacketHeaderSize() {
+        return Packet.PACKET_HEADER_SIZE;
+    }
+
+    public ByteBuffer writeToBuffer(byte[] src, ByteBuffer buffer) {
+        int offset = 0;
+        int length = src.length;
+        int remaining = buffer.remaining();
+        while (length > 0) {
+            if (remaining >= length) {
+                buffer.put(src, offset, length);
+                break;
+            } else {
+                buffer.put(src, offset, remaining);
+                write(buffer);
+                buffer = allocate();
+                offset += remaining;
+                length -= remaining;
+                remaining = buffer.remaining();
+                continue;
+            }
+        }
+        return buffer;
+    }
+
+    public void write(ByteBuffer buffer) {
+        buffer.flip();
+        try {
+            out.write(buffer.array(), buffer.arrayOffset(), buffer.limit());
+            out.flush();
+        } catch (IOException e) {
+            logger.error("Failed to write", e);
+        }
+    }
 }

@@ -17,8 +17,15 @@
  */
 package org.lealone.plugins.mysql.server.protocol;
 
-public interface PacketInput {
+public class PacketInput {
 
-    byte[] getData();
-    
+    private final byte[] data;
+
+    public PacketInput(byte[] data) {
+        this.data = data;
+    }
+
+    public byte[] getData() {
+        return data;
+    }
 }

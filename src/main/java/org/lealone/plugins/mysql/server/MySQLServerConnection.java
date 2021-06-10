@@ -47,7 +47,6 @@ import org.lealone.plugins.mysql.server.protocol.ErrorPacket;
 import org.lealone.plugins.mysql.server.protocol.FieldPacket;
 import org.lealone.plugins.mysql.server.protocol.HandshakePacket;
 import org.lealone.plugins.mysql.server.protocol.OkPacket;
-import org.lealone.plugins.mysql.server.protocol.Packet;
 import org.lealone.plugins.mysql.server.protocol.PacketInput;
 import org.lealone.plugins.mysql.server.protocol.PacketOutput;
 import org.lealone.plugins.mysql.server.protocol.ResultSetHeaderPacket;
@@ -58,7 +57,7 @@ import org.lealone.sql.PreparedSQLStatement;
 public class MySQLServerConnection extends AsyncConnection {
 
     private static final Logger logger = LoggerFactory.getLogger(MySQLServerConnection.class);
-    private static final int BUFFER_SIZE = 16 * 1024;
+    public static final int BUFFER_SIZE = 16 * 1024;
     private static final byte[] AUTH_OK = new byte[] { 7, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0 };
 
     private final MySQLServer server;
@@ -71,87 +70,10 @@ public class MySQLServerConnection extends AsyncConnection {
     }
 
     void handshake() {
-        DataOutputStream out = new DataOutputStream(new NetBufferOutputStream(writableChannel, BUFFER_SIZE));
         int threadId = 0;
-
-        PacketOutputImpl output = new PacketOutputImpl(out);
+        PacketOutput output = getPacketOutput();
         HandshakePacket.create(threadId).write(output);
         packetHandler = new AuthPacketHandler(this);
-    }
-
-    static class PacketInputImpl implements PacketInput {
-        byte[] data;
-
-        PacketInputImpl(byte[] data) {
-            this.data = data;
-        }
-
-        @Override
-        public byte[] getData() {
-            return data;
-        }
-    }
-
-    static class PacketOutputImpl implements PacketOutput {
-        DataOutputStream out;
-
-        PacketOutputImpl(DataOutputStream out) {
-            this.out = out;
-        }
-
-        @Override
-        public ByteBuffer checkWriteBuffer(ByteBuffer buffer, int capacity) {
-            if (capacity > buffer.remaining()) {
-                write(buffer);
-                return allocate();
-            } else {
-                return buffer;
-            }
-        }
-
-        @Override
-        public ByteBuffer allocate() {
-            return ByteBuffer.allocate(BUFFER_SIZE);
-        }
-
-        @Override
-        public int getPacketHeaderSize() {
-            return Packet.PACKET_HEADER_SIZE;
-        }
-
-        @Override
-        public ByteBuffer writeToBuffer(byte[] src, ByteBuffer buffer) {
-            int offset = 0;
-            int length = src.length;
-            int remaining = buffer.remaining();
-            while (length > 0) {
-                if (remaining >= length) {
-                    buffer.put(src, offset, length);
-                    break;
-                } else {
-                    buffer.put(src, offset, remaining);
-                    write(buffer);
-                    buffer = allocate();
-                    offset += remaining;
-                    length -= remaining;
-                    remaining = buffer.remaining();
-                    continue;
-                }
-            }
-            return buffer;
-        }
-
-        @Override
-        public void write(ByteBuffer buffer) {
-            buffer.flip();
-            try {
-                out.write(buffer.array(), buffer.arrayOffset(), buffer.limit());
-                out.flush();
-            } catch (IOException e) {
-                logger.error("Failed to write", e);
-            }
-        }
-
     }
 
     public void authenticate(AuthPacket authPacket) {
@@ -168,7 +90,7 @@ public class MySQLServerConnection extends AsyncConnection {
         sendMessage(AUTH_OK);
     }
 
-    private Session createSession(AuthPacket authPacket) {
+    private static Session createSession(AuthPacket authPacket) {
         Properties info = new Properties();
         info.put("MODE", "MySQL");
         info.put("USER", authPacket.user);
@@ -282,21 +204,16 @@ public class MySQLServerConnection extends AsyncConnection {
         }
     }
 
-    public void sendErrorMessage(Throwable e) {
+    private void sendErrorMessage(Throwable e) {
         if (e instanceof DbException) {
             DbException dbe = (DbException) e;
-
             sendErrorMessage(dbe.getErrorCode(), dbe.getMessage());
         } else {
             sendErrorMessage(DbException.convert(e));
         }
     }
 
-    public void sendErrorMessage(int errno, Throwable e) {
-        sendErrorMessage(errno, e.getCause());
-    }
-
-    public void sendErrorMessage(int errno, String msg) {
+    private void sendErrorMessage(int errno, String msg) {
         ErrorPacket err = new ErrorPacket();
         err.packetId = 0;
         err.errno = errno;
@@ -304,14 +221,18 @@ public class MySQLServerConnection extends AsyncConnection {
         err.write(getPacketOutput());
     }
 
-    PacketOutput getPacketOutput() {
-        DataOutputStream out = new DataOutputStream(new NetBufferOutputStream(writableChannel, BUFFER_SIZE));
-        PacketOutputImpl output = new PacketOutputImpl(out);
+    private PacketOutput getPacketOutput() {
+        DataOutputStream out = new DataOutputStream(createNetBufferOutputStream());
+        PacketOutput output = new PacketOutput(out);
         return output;
     }
 
-    public void sendMessage(byte[] data) {
-        NetBufferOutputStream out = new NetBufferOutputStream(writableChannel, BUFFER_SIZE);
+    private NetBufferOutputStream createNetBufferOutputStream() {
+        return new NetBufferOutputStream(writableChannel, BUFFER_SIZE);
+    }
+
+    private void sendMessage(byte[] data) {
+        NetBufferOutputStream out = createNetBufferOutputStream();
         try {
             out.write(data);
             out.flush();
@@ -352,10 +273,11 @@ public class MySQLServerConnection extends AsyncConnection {
             DataInputStream in = new DataInputStream(new NetBufferInputStream(buffer));
             in.read(packet, 4, length);
             in.close();
-            PacketInputImpl input = new PacketInputImpl(packet);
+            PacketInput input = new PacketInput(packet);
             packetHandler.handle(input);
         } catch (Throwable e) {
             logger.error("Handle packet", e);
+            sendErrorMessage(e);
         }
     }
 }
