@@ -19,6 +19,7 @@ package org.lealone.plugins.mysql.server.handler;
 
 import java.io.UnsupportedEncodingException;
 
+import org.lealone.common.exceptions.DbException;
 import org.lealone.plugins.mysql.server.MySQLServerConnection;
 import org.lealone.plugins.mysql.server.protocol.ErrorCode;
 import org.lealone.plugins.mysql.server.protocol.InitDbPacket;
@@ -28,17 +29,10 @@ import org.lealone.plugins.mysql.server.protocol.PacketInput;
 
 public class CommandPacketHandler implements PacketHandler {
 
-    // private static final Logger logger = LoggerFactory.getLogger(CommandPacketHandler.class);
-
-    // private PacketHandler packetHandler;
     private final MySQLServerConnection conn;
 
     public CommandPacketHandler(MySQLServerConnection conn) {
         this.conn = conn;
-    }
-
-    public void setPacketHandler(PacketHandler packetHandler) {
-        // this.packetHandler = packetHandler;
     }
 
     @Override
@@ -52,7 +46,7 @@ public class CommandPacketHandler implements PacketHandler {
                 // 使用指定的编码来读取数据
                 sql = mm.readString("utf-8");
             } catch (UnsupportedEncodingException e) {
-                return;
+                throw DbException.convert(e);
             }
             conn.executeStatement(sql);
             break;
