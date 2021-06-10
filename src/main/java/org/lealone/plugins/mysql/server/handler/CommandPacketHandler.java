@@ -20,6 +20,8 @@ package org.lealone.plugins.mysql.server.handler;
 import java.io.UnsupportedEncodingException;
 
 import org.lealone.plugins.mysql.server.MySQLServerConnection;
+import org.lealone.plugins.mysql.server.protocol.ErrorCode;
+import org.lealone.plugins.mysql.server.protocol.InitDbPacket;
 import org.lealone.plugins.mysql.server.protocol.MySQLMessage;
 import org.lealone.plugins.mysql.server.protocol.MySQLPacket;
 import org.lealone.plugins.mysql.server.protocol.PacketInput;
@@ -52,31 +54,24 @@ public class CommandPacketHandler implements PacketHandler {
             } catch (UnsupportedEncodingException e) {
                 return;
             }
-            // logger.info("sql: " + sql);
             conn.executeStatement(sql);
             break;
+        case MySQLPacket.COM_INIT_DB:
+            InitDbPacket packet = new InitDbPacket();
+            packet.read(in);
+            conn.initDatabase(packet.database);
+            conn.writeOkPacket();
+            break;
+        case MySQLPacket.COM_QUIT:
+            conn.close();
+            break;
+        case MySQLPacket.COM_PROCESS_KILL: // 直接返回OkPacket
+        case MySQLPacket.COM_PING:
+            conn.writeOkPacket();
+            break;
         default:
+            conn.sendErrorMessage(ErrorCode.ER_UNKNOWN_COM_ERROR, "Unknown command");
         }
-        // case MySQLPacket.COM_INIT_DB:
-        // commands.doInitDB();
-        // source.initDB(data);
-        // break;
-        // case MySQLPacket.COM_QUERY:
-        // commands.doQuery();
-        // source.query(data);
-        // break;
-        // case MySQLPacket.COM_PING:
-        // commands.doPing();
-        // source.ping();
-        // break;
-        // case MySQLPacket.COM_QUIT:
-        // commands.doQuit();
-        // source.close();
-        // break;
-        // case MySQLPacket.COM_PROCESS_KILL:
-        // commands.doKill();
-        // source.kill(data);
-        // break;
         // case MySQLPacket.COM_STMT_PREPARE:
         // commands.doStmtPrepare();
         // source.stmtPrepare(data);
@@ -93,9 +88,5 @@ public class CommandPacketHandler implements PacketHandler {
         // commands.doHeartbeat();
         // source.heartbeat(data);
         // break;
-        // default:
-        // commands.doOther();
-        // source.writeErrMessage(ErrorCode.ER_UNKNOWN_COM_ERROR, "Unknown command");
-        // }
     }
 }

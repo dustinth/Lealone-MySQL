@@ -63,22 +63,26 @@ public class MySQLServerConnection extends AsyncConnection {
     private final MySQLServer server;
     private Session session;
     private PacketHandler packetHandler;
+    private AuthPacket authPacket;
 
     protected MySQLServerConnection(MySQLServer server, WritableChannel writableChannel, boolean isServer) {
         super(writableChannel, isServer);
         this.server = server;
     }
 
+    // 客户端连上来后，数据库先发回一个握手包
     void handshake() {
         int threadId = 0;
         PacketOutput output = getPacketOutput();
         HandshakePacket.create(threadId).write(output);
+        // 接着创建一个AuthPacketHandler用来鉴别是否是合法的用户
         packetHandler = new AuthPacketHandler(this);
     }
 
     public void authenticate(AuthPacket authPacket) {
+        this.authPacket = authPacket;
         try {
-            session = createSession(authPacket);
+            session = createSession(authPacket, MySQLServer.DATABASE_NAME);
         } catch (Throwable e) {
             logger.error("Failed to create session", e);
             sendErrorMessage(e);
@@ -86,16 +90,17 @@ public class MySQLServerConnection extends AsyncConnection {
             return;
         }
         server.addConnection(this);
+        // 鉴别成功后创建CommandPacketHandler用来处理各种命令(包括SQL)
         packetHandler = new CommandPacketHandler(this);
         sendMessage(AUTH_OK);
     }
 
-    private static Session createSession(AuthPacket authPacket) {
+    private static Session createSession(AuthPacket authPacket, String dbName) {
         Properties info = new Properties();
         info.put("MODE", "MySQL");
         info.put("USER", authPacket.user);
         info.put("PASSWORD", getPassword(authPacket));
-        String url = Constants.URL_PREFIX + Constants.URL_EMBED + MySQLServer.DATABASE_NAME;
+        String url = Constants.URL_PREFIX + Constants.URL_EMBED + dbName;
         ConnectionInfo ci = new ConnectionInfo(url, info);
         return ci.createSession();
     }
@@ -105,6 +110,10 @@ public class MySQLServerConnection extends AsyncConnection {
             return "";
         // TODO MySQL的密码跟Lealone不一样
         return "";
+    }
+
+    public void initDatabase(String dbName) {
+        session = createSession(authPacket, dbName);
     }
 
     public void executeStatement(String sql) {
@@ -122,7 +131,6 @@ public class MySQLServerConnection extends AsyncConnection {
         } catch (Throwable e) {
             logger.error("Failed to execute statement: " + sql, e);
             sendErrorMessage(e);
-            return;
         }
     }
 
@@ -182,6 +190,14 @@ public class MySQLServerConnection extends AsyncConnection {
     }
 
     private void writeUpdateResult(int updateCount) {
+        writeOkPacket(updateCount);
+    }
+
+    public void writeOkPacket() {
+        writeOkPacket(0);
+    }
+
+    private void writeOkPacket(int updateCount) {
         PacketOutput out = getPacketOutput();
         OkPacket packet = new OkPacket();
         packet.packetId = 1;
@@ -213,7 +229,7 @@ public class MySQLServerConnection extends AsyncConnection {
         }
     }
 
-    private void sendErrorMessage(int errno, String msg) {
+    public void sendErrorMessage(int errno, String msg) {
         ErrorPacket err = new ErrorPacket();
         err.packetId = 0;
         err.errno = errno;
@@ -243,10 +259,6 @@ public class MySQLServerConnection extends AsyncConnection {
 
     private final ByteBuffer packetLengthByteBuffer = ByteBuffer.allocateDirect(4);
 
-    private short getUnsignedByte(int pos) {
-        return (short) (packetLengthByteBuffer.get(pos) & 0xff);
-    }
-
     @Override
     public ByteBuffer getPacketLengthByteBuffer() {
         return packetLengthByteBuffer;
@@ -254,9 +266,9 @@ public class MySQLServerConnection extends AsyncConnection {
 
     @Override
     public int getPacketLength() {
-        int length = getUnsignedByte(0) & 0xff;
-        length |= (getUnsignedByte(1) & 0xff) << 8;
-        length |= (getUnsignedByte(2) & 0xff) << 16;
+        int length = (packetLengthByteBuffer.get(0) & 0xff);
+        length |= (packetLengthByteBuffer.get(1) & 0xff) << 8;
+        length |= (packetLengthByteBuffer.get(2) & 0xff) << 16;
         return length;
     }
 

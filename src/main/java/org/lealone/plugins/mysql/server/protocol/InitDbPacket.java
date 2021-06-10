@@ -15,24 +15,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.lealone.plugins.mysql.server.handler;
+package org.lealone.plugins.mysql.server.protocol;
 
-import org.lealone.plugins.mysql.server.MySQLServerConnection;
-import org.lealone.plugins.mysql.server.protocol.AuthPacket;
-import org.lealone.plugins.mysql.server.protocol.PacketInput;
+public class InitDbPacket extends RequestPacket {
 
-public class AuthPacketHandler implements PacketHandler {
+    public String database;
 
-    private final MySQLServerConnection conn;
-
-    public AuthPacketHandler(MySQLServerConnection conn) {
-        this.conn = conn;
+    @Override
+    public void read(PacketInput in) {
+        MySQLMessage mm = new MySQLMessage(in);
+        packetLength = mm.readUB3();
+        packetId = mm.read();
+        mm.position(5);
+        database = mm.readStringWithNull();
     }
 
     @Override
-    public void handle(PacketInput in) {
-        AuthPacket authPacket = new AuthPacket();
-        authPacket.read(in);
-        conn.authenticate(authPacket);
+    protected String getPacketInfo() {
+        return "MySQL Init Database Packet";
     }
 }
