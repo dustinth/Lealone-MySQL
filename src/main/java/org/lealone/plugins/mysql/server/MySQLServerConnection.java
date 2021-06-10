@@ -64,11 +64,6 @@ public class MySQLServerConnection extends AsyncConnection {
     private final MySQLServer server;
     private Session session;
     private PacketHandler packetHandler;
-    private NetBuffer lastBuffer;
-
-    // private DataInputStream in;
-    // private DataOutputStream out;
-    // private boolean initialized;
 
     protected MySQLServerConnection(MySQLServer server, WritableChannel writableChannel, boolean isServer) {
         super(writableChannel, isServer);
@@ -325,70 +320,42 @@ public class MySQLServerConnection extends AsyncConnection {
         }
     }
 
-    private int getPacketLength(NetBuffer buffer, int pos) throws IOException {
-        int length = buffer.getUnsignedByte(pos) & 0xff;
-        length |= (buffer.getUnsignedByte(pos + 1) & 0xff) << 8;
-        length |= (buffer.getUnsignedByte(pos + 2) & 0xff) << 16;
-        return length + Packet.PACKET_HEADER_SIZE;
+    private final ByteBuffer packetLengthByteBuffer = ByteBuffer.allocateDirect(4);
+
+    private short getUnsignedByte(int pos) {
+        return (short) (packetLengthByteBuffer.get(pos) & 0xff);
+    }
+
+    @Override
+    public ByteBuffer getPacketLengthByteBuffer() {
+        return packetLengthByteBuffer;
+    }
+
+    @Override
+    public int getPacketLength() {
+        int length = getUnsignedByte(0) & 0xff;
+        length |= (getUnsignedByte(1) & 0xff) << 8;
+        length |= (getUnsignedByte(2) & 0xff) << 16;
+        return length;
     }
 
     @Override
     public void handle(NetBuffer buffer) {
-        if (lastBuffer != null) {
-            buffer = lastBuffer.appendBuffer(buffer);
-            lastBuffer = null;
+        if (!buffer.isOnlyOnePacket()) {
+            DbException.throwInternalError("NetBuffer must be OnlyOnePacket");
         }
-
-        int length = buffer.length();
-        if (length < 4) {
-            lastBuffer = buffer;
-            return;
-        }
-
-        int pos = 0;
         try {
-            while (true) {
-                // 必须生成新的Transfer实例，不同协议包对应不同Transfer实例，
-                // 否则如果有多个CommandHandler线程时会用同一个Transfer实例写数据，这会产生并发问题。
-                DataInputStream in;
-                if (pos == 0)
-                    in = createDataInputStream(buffer);
-                else
-                    in = createDataInputStream(buffer.slice(pos, pos + length));
-                int packetLength = getPacketLength(buffer, pos) - 4;
-                if (length - 4 == packetLength) {
-                    parsePacket(in, packetLength);
-                    break;
-                } else if (length - 4 > packetLength) {
-                    parsePacket(in, packetLength);
-                    pos = pos + packetLength + 4;
-                    length = length - (packetLength + 4);
-                    // 有可能剩下的不够4个字节了
-                    if (length < 4) {
-                        lastBuffer = buffer.getBuffer(pos, pos + length);
-                        break;
-                    } else {
-                        continue;
-                    }
-                } else {
-                    lastBuffer = buffer.getBuffer(pos, pos + length);
-                    break;
-                }
-            }
+            int length = buffer.length();
+            byte[] packet = new byte[length + 4];
+            packetLengthByteBuffer.get(packet, 0, 4);
+            packetLengthByteBuffer.clear();
+            DataInputStream in = new DataInputStream(new NetBufferInputStream(buffer));
+            in.read(packet, 4, length);
+            in.close();
+            PacketInputImpl input = new PacketInputImpl(packet);
+            packetHandler.handle(input);
         } catch (Throwable e) {
-            logger.error("Parse packet", e);
+            logger.error("Handle packet", e);
         }
-    }
-
-    private static DataInputStream createDataInputStream(NetBuffer buffer) {
-        return new DataInputStream(new NetBufferInputStream(buffer));
-    }
-
-    private void parsePacket(DataInputStream in, int packetLength) throws IOException {
-        packetLength += 4;
-        byte[] packet = new byte[packetLength];
-        in.read(packet, 0, packetLength);
-        PacketInputImpl input = new PacketInputImpl(packet);
-        packetHandler.handle(input);
     }
 }
