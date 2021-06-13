@@ -35,7 +35,7 @@ transaction_engines:
 
 sql_engines:
   - name: Lealone
-    enabled: true
+    enabled: false
     parameters: {
         # key1: v1,
         # key2: v2,
@@ -49,7 +49,7 @@ sql_engines:
 
 protocol_server_engines:
   - name: TCP
-    enabled: true
+    enabled: false
     parameters: {
         port: 9210,
         trace: false,
@@ -60,6 +60,7 @@ protocol_server_engines:
   - name: MySQL
     enabled: true
     parameters: {
+        __runInMainThread__: true,
         port: 9310,
         trace: false,
         allow_others: true,
