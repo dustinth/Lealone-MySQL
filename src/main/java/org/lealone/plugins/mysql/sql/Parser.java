@@ -4993,7 +4993,15 @@ public class Parser implements SQLParser {
                 try {
                     command = new SetDatabase(session, DbSetting.valueOf(currentToken));
                 } catch (Throwable t2) {
-                    throw getSyntaxError();
+                    read();
+                    readIfEqualOrTo();
+                    if (currentTokenType == VALUE) {
+                        readString(); // 加单引号
+                    } else {
+                        readUniqueIdentifier(); // 不加单引号
+                    }
+                    return new NoOperation(session);
+                    // throw getSyntaxError();
                 }
             }
             read();
